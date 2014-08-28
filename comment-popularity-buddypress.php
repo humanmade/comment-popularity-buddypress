@@ -37,15 +37,15 @@ if ( version_compare( phpversion(), '5.3.2', '<' ) ) {
 	wp_die( sprintf( __( 'This plugin requires PHP Version %s. Sorry about that.', 'comment-popularity-buddypress' ), '5.3.2' ), 'Comment Popularity BuddyPress', array( 'back_link' => true ) );
 }
 
-// Main plugin class
-require_once plugin_dir_path( __FILE__ ) . 'inc/class-comment-popularity-buddypress.php';
-
-register_activation_hook( __FILE__, array( 'HMN_Comment_Popularity_BuddyPress', 'activate' ) );
-
 // Only load code that needs BuddyPress to run once BP is loaded and initialized.
 function hmn_cpbp_init() {
 
-	add_action( 'plugins_loaded', array( 'HMN_Comment_Popularity_BuddyPress', 'get_instance' ) );
+	// Main plugin class
+	require_once plugin_dir_path( __FILE__ ) . 'inc/class-comment-popularity-buddypress.php';
+
+	register_activation_hook( __FILE__, array( 'HMN_Comment_Popularity_BuddyPress', 'activate' ) );
+	$cpbp = HMN_Comment_Popularity_BuddyPress::get_instance();
+	$GLOBALS['cpbp'] = $cpbp;
 
 }
 add_action( 'bp_include', 'hmn_cpbp_init' );

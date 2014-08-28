@@ -29,6 +29,9 @@ class HMN_Comment_Popularity_BuddyPress {
 	 */
 	private function __construct() {
 
+		add_action( 'hmn_cp_comment_vote', array( $this, 'log_voting_to_activity_stream' ), 10, 3 );
+
+		add_action( 'bp_register_activity_actions', array( $this, 'register_plugin_activity_actions' ) );
 
 	}
 
@@ -70,10 +73,84 @@ class HMN_Comment_Popularity_BuddyPress {
 		return self::$instance;
 	}
 
+	public function log_voting_to_activity_stream( $user_id, $comment_id, $action ) {
+
+		$comment = get_comment( $comment_id );
+		$user_name    = self::get_comment_author( $comment, 'name' );
+		$post_id      = $comment->comment_post_ID;
+		$post_title   = ( $post = get_post( $post_id ) ) ? "\"$post->post_title\"" : __( 'a post', 'comment-popularity-stream' );
+
+		$activity_id = bp_activity_add(
+			array(
+				'action' => __( 'Vote on a comment', 'comment-popularity-buddypress' ),
+				'content' => sprintf( _x(
+					'Voted on %1$s\'s comment on %2$s ( %3$s )',
+					'1: Comment author, 2: Post name, 3: Vote Type',
+					'comment-popularity-buddypress'
+				), $user_name, $post_title, $action ),
+				'component' => 'activity',
+				'type' => 'activity_update'
+			)
+		);
+
+		return $activity_id;
+	}
+
+	public function register_plugin_activity_actions() {
+
+		$bp = buddyPress();
+
+		$bp->bp_plugin = new stdClass();
+		$bp->bp_plugin->id = 'comment_popularity';
+
+		// Bail if activity is not active
+		if ( ! bp_is_active( 'activity' ) )
+			return false;
+
+		bp_activity_set_action( $bp->bp_plugin->id, 'comment_popularity_update', __( 'Comment vote' ) );
+
+	}
+
 	/**
-	 * Load the Javascripts
+	 * Fetches the comment author and returns the specified field.
+	 *
+	 * This also takes into consideration whether or not the blog requires only
+	 * name and e-mail or that users be logged in to comment. In either case it
+	 * will try to see if the e-mail provided does belong to a registered user.
+	 *
+	 * @param  object|int  $comment  A comment object or comment ID
+	 * @param  string      $field    What field you want to return
+	 * @return int|string  $output   User ID or user display name
 	 */
-	public function enqueue_scripts() {}
+	public static function get_comment_author( $comment, $field = 'id' ) {
+		$comment = is_object( $comment ) ? $comment : get_comment( absint( $comment ) );
+
+		$req_name_email = get_option( 'require_name_email' );
+		$req_user_login = get_option( 'comment_registration' );
+
+		$user_id   = 0;
+		$user_name = __( 'Guest', 'comment-popularity-buddypress' );
+
+		if ( $req_name_email && isset( $comment->comment_author_email ) && isset( $comment->comment_author ) ) {
+			$user      = get_user_by( 'email', $comment->comment_author_email );
+			$user_id   = isset( $user->ID ) ? $user->ID : 0;
+			$user_name = isset( $user->display_name ) ? $user->display_name : $comment->comment_author;
+		}
+
+		if ( $req_user_login ) {
+			$user      = wp_get_current_user();
+			$user_id   = $user->ID;
+			$user_name = $user->display_name;
+		}
+
+		if ( 'id' === $field ) {
+			$output = $user_id;
+		} elseif ( 'name' === $field ) {
+			$output = $user_name;
+		}
+
+		return $output;
+	}
 
 	/**
 	 * Loads the plugin language files.
